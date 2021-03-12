@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         NGA 图片浏览器
 // @namespace    https://greasyfork.org/zh-CN/users/164691-shy07
-// @version      1.00
+// @version      1.10
 // @description  收集指定楼层的图片，改善图片浏览体验，并支持批量下载
 // @author       Shy07
 // @match        *://nga.178.com/*
@@ -381,6 +381,11 @@
     }
   }
 
+  const getExtname = url => {
+    const filename = url.split('/').pop()
+    const extname = filename.split('.').pop()
+    return extname
+  }
   const collectImages = container => {
     showCollapseContent(container)
     imageSources = []
@@ -394,15 +399,14 @@
         return
       }
       if (src.includes('/attachments/')) {
-        const filename = url.split('/').pop()
-        const extname = filename.split('.').pop()
+        const fileExtname = getExtname(img.src)
         const arr = img.src
           .replace(/https:/g, 'http:')
           .replace(/\.medium\./, '.')
           .replace(/\.thumb\./, '.')
           .replace(/\.thumb_s\./, '.')
           .replace(/\.thumb_ss\./, '.')
-          .replace(`${extname}.${extname}`, extname)
+          .replace(`${fileExtname}.${fileExtname}`, fileExtname)
           .split('http:')
         const src = arr.filter(s => !!s)
         imageSources.push(src[0])
