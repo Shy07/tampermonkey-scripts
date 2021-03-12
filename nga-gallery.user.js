@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         NGA 图片浏览器
 // @namespace    https://greasyfork.org/zh-CN/users/164691-shy07
-// @version      1.20
+// @version      1.30
 // @description  收集指定楼层的图片，改善图片浏览体验，并支持批量下载
 // @author       Shy07
 // @match        *://nga.178.com/*
@@ -144,7 +144,7 @@
     checkFileSize(src, size => {
       img.innerHTML = ''
       img.style.backgroundImage = ''
-      if (size > 102400) {
+      if (size > 51200) {
         img.style.backgroundImage = `url(${src})`
       } else {
         const tips = document.createElement('a')
