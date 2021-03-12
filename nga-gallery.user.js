@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         NGA 图片浏览器
 // @namespace    https://greasyfork.org/zh-CN/users/164691-shy07
-// @version      1.61
+// @version      1.62
 // @description  收集指定楼层的图片，改善图片浏览体验，并支持批量下载
 // @author       Shy07
 // @match        *://nga.178.com/*
@@ -370,11 +370,10 @@
   const getOriginFile = srcUrl => {
     const fileExtname = getExtname(srcUrl)
     const url = srcUrl
-      .replace(/\.medium\./, '.')
-      .replace(/\.thumb\./, '.')
-      .replace(/\.thumb_s\./, '.')
-      .replace(/\.thumb_ss\./, '.')
-      .replace(`${fileExtname}.${fileExtname}`, fileExtname)
+      .replace(`.medium.${fileExtname}`, '')
+      .replace(`.thumb.${fileExtname}`, '')
+      .replace(`.thumb_s.${fileExtname}`, '')
+      .replace(`.thumb_ss.${fileExtname}`, '')
     return url
   }
   const collectImages = container => {
