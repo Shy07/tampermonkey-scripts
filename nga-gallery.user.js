@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         NGA 图片浏览器
 // @namespace    https://greasyfork.org/zh-CN/users/164691-shy07
-// @version      1.50
+// @version      1.60
 // @description  收集指定楼层的图片，改善图片浏览体验，并支持批量下载
 // @author       Shy07
 // @match        *://nga.178.com/*
@@ -140,28 +140,7 @@
 
   const setImageSrc = (src, ele = null) => {
     const img = ele || document.querySelector('.' + imgClass)
-    if (!img) return
-    checkFileSize(src, size => {
-      img.innerHTML = ''
-      img.style.backgroundImage = ''
-      if (size > 102400) {
-        img.style.backgroundImage = `url(${src})`
-      } else {
-        const tips = document.createElement('a')
-        const showImage = () => {
-          img.removeChild(tips)
-          img.style.backgroundImage = `url(${src})`
-        }
-        tips.href = 'javascript:void(0)'
-        tips.style = `
-          color: #fff;
-          text-decoration-line: none;
-        `
-        tips.innerHTML = '图片太小已隐藏，点此显示'
-        tips.addEventListener('click', showImage)
-        img.appendChild(tips)
-      }
-    })
+    if (img) img.style.backgroundImage = `url(${src})`
   }
   const prevImage = () => {
     currentImage = currentImage === 0 ? imageSources.length - 1 : currentImage - 1
@@ -388,6 +367,16 @@
     const extname = filename.split('.').pop()
     return extname
   }
+  const getOriginFile = srcUrl => {
+    const fileExtname = getExtname(srcUrl)
+    const url = srcUrl
+      .replace(/\.medium\./, '.')
+      .replace(/\.thumb\./, '.')
+      .replace(/\.thumb_s\./, '.')
+      .replace(/\.thumb_ss\./, '.')
+      .replace(`${fileExtname}.${fileExtname}`, fileExtname)
+    return url
+  }
   const collectImages = container => {
     showCollapseContent(container)
     imageSources = []
@@ -397,21 +386,15 @@
       const src = img.src
       const lazySrc = img.dataset ? img.dataset.srclazy : ''
       if (lazySrc) {
-        imageSources.push(lazySrc)
+        const url = getOriginFile(lazySrc)
+        imageSources.push(url)
         return
       }
       if (src.includes('/attachments/')) {
-        const fileExtname = getExtname(img.src)
-        const arr = img.src
-          .replace(/https:/g, 'http:')
-          .replace(/\.medium\./, '.')
-          .replace(/\.thumb\./, '.')
-          .replace(/\.thumb_s\./, '.')
-          .replace(/\.thumb_ss\./, '.')
-          .replace(`${fileExtname}.${fileExtname}`, fileExtname)
-          .split('http:')
-        const src = arr.filter(s => !!s)
-        imageSources.push(src[0])
+        const arr = img.src.replace(/https:/g, 'http:').split('http:')
+        const tmp = arr.filter(s => !!s)[0]
+        const url = getOriginFile(tmp)
+        imageSources.push(getOriginFile(url))
       }
     })
   }
