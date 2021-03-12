@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         NGA 图片浏览器
 // @namespace    https://greasyfork.org/zh-CN/users/164691-shy07
-// @version      1.62
+// @version      1.70
 // @description  收集指定楼层的图片，改善图片浏览体验，并支持批量下载
 // @author       Shy07
 // @match        *://nga.178.com/*
@@ -24,6 +24,7 @@
   const callerId = '_shy07_gallery_caller'
   const containerClass = '_shy07_gallery_container'
   const imgClass = '_shy07_gallery_img'
+  const progressID = '_shy07_progress_id'
   const galleryContainerStyle = `
     display: block;
     top: 0;
@@ -54,6 +55,7 @@
     color: #fff;
     font-size: 5rem;
     text-decoration-line: none;
+    opacity: 0.6;
   `
   const leftArrowStyle = `
     left: 0;
@@ -68,7 +70,7 @@
     position: fixed;
     top: 0;
     right: 0;
-    padding: 1rem 2rem;
+    padding: .5rem 1rem;
     color: #fff;
     text-decoration-line: none;
   `
@@ -76,7 +78,7 @@
     position: fixed;
     top: 0;
     left: 0;
-    padding: 1rem 2rem;
+    padding: .5rem 1rem;
   `
   const topLeftMenuItemStyle = `
     display: text-block;
@@ -138,21 +140,27 @@
     })
   }
 
-  const setImageSrc = (src, ele = null) => {
+  const setImageSrc = (index, ele = null) => {
+    const progress = document.querySelector('#' + progressID)
+    if (progress) progress.innerHTML = `${index + 1}/${imageSources.length}`
+    const src = imageSources[index]
     const img = ele || document.querySelector('.' + imgClass)
     if (img) img.style.backgroundImage = `url(${src})`
   }
   const prevImage = () => {
     currentImage = currentImage === 0 ? imageSources.length - 1 : currentImage - 1
-    setImageSrc(imageSources[currentImage])
+    setImageSrc(currentImage)
   }
   const nextImage = () => {
     currentImage = currentImage === imageSources.length - 1 ? 0 : currentImage + 1
-    setImageSrc(imageSources[currentImage])
+    setImageSrc(currentImage)
   }
   const handleKeydown = ev => {
     const code = ev.keyCode
-    if (code === 37) {
+    if (code === 27) {
+      hideGallery()
+      ev.preventDefault()
+    } else if (code === 37) {
       prevImage()
       ev.preventDefault()
     } else if (code === 39) {
@@ -275,7 +283,7 @@
     const img = document.createElement('div')
     img.className = imgClass
     img.style = galleryImgStyle
-    setImageSrc(imageSources[0], img)
+    setImageSrc(0, img)
     return img
   }
   const createLeftArrow = () => {
@@ -305,6 +313,10 @@
   const createTopLeftMenu = () => {
     const ele = document.createElement('div')
     ele.style = topLeftMenuStyle
+    const progress = document.createElement('span')
+    progress.id = progressID
+    progress.style= topLeftMenuItemStyle
+    progress.innerHTML = `${currentImage + 1}/${imageSources.length}`
     const downloadBtn = document.createElement('a')
     downloadBtn.style= topLeftMenuItemStyle
     downloadBtn.innerHTML = '下载'
@@ -320,6 +332,7 @@
     newTabBtn.innerHTML = '新页面打开'
     newTabBtn.href = 'javascript:void(0)'
     newTabBtn.addEventListener('click', openInNewTab)
+    ele.appendChild(progress)
     ele.appendChild(downloadBtn)
     ele.appendChild(downloadAllBtn)
     ele.appendChild(newTabBtn)
@@ -335,7 +348,7 @@
     const galleryMask = document.querySelector('.' + containerClass)
     if (galleryMask) {
       currentImage = 0
-      setImageSrc(imageSources[currentImage])
+      setImageSrc(currentImage)
       galleryMask.style = galleryContainerStyle
     } else {
       const ele = document.createElement('div')
