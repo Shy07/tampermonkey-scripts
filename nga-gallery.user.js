@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         NGA 图片浏览器
 // @namespace    https://greasyfork.org/zh-CN/users/164691-shy07
-// @version      0.06
+// @version      1.00
 // @description  收集指定楼层的图片，改善图片浏览体验，并支持批量下载
 // @author       Shy07
 // @match        *://nga.178.com/*
@@ -39,6 +39,9 @@
     left: 0;
     width: 100vw;
     height: 100vh;
+    text-align: center;
+    line-height: 100vh;
+    color: #fff;
     background-repeat: no-repeat;
     background-size: contain;
     background-position: center;
@@ -92,9 +95,71 @@
     }
   }
 
-  const setImageSrc = src => {
-    const img = document.querySelector('.' + imgClass)
-    if (img) img.style.backgroundImage = `url(${src})`
+  const checkFileSize = (url, callback, tryTimes = 0) => {
+    const GM_download = GM.xmlHttpRequest || GM_xmlHttpRequest
+    const clearUrl = url.replace(/[&\?]?download_timestamp=\d+/, '')
+    const retryUrl = clearUrl + (clearUrl.indexOf('?') === -1 ? '?' : '&') + 'download_timestamp=' + new Date().getTime()
+    GM_download({
+      method: 'HEAD',
+      responseType: 'blob',
+      url,
+      onreadystatechange: (responseDetails) => {
+        if (responseDetails.readyState === 4) {
+          if (responseDetails.status === 200 || responseDetails.status === 304 || responseDetails.status === 0) {
+            const match = responseDetails.responseHeaders
+              .replace(/ /g, '')
+              .match(/content-length:\d+/)
+            const tmp = match && match[0] && match[0].split(':')
+            const len = parseInt(tmp[1], 10)
+            if (len && (len / 1024 >= 5)) {
+              callback(len)
+            } else if (tryTimes++ === 3) {
+              callback(len)
+            } else {
+              checkFileSize(retryUrl, callback, tryTimes)
+            }
+          } else {
+            if (tryTimes++ === 3) {
+              callback(null)
+            } else {
+              checkFileSize(retryUrl, callback, tryTimes)
+            }
+          }
+        }
+      },
+      onerror: (responseDetails) => {
+        if (tryTimes++ === 3) {
+          callback(null)
+        } else {
+          checkFileSize(retryUrl, callback, tryTimes)
+        }
+        console.log(responseDetails.status)
+      }
+    })
+  }
+
+  const setImageSrc = (src, ele = null) => {
+    const img = ele || document.querySelector('.' + imgClass)
+    if (!img) return
+    checkFileSize(src, size => {
+      if (size > 102400) {
+        img.style.backgroundImage = `url(${src})`
+      } else {
+        const tips = document.createElement('a')
+        const showImage = () => {
+          img.removeChild(tips)
+          img.style.backgroundImage = `url(${src})`
+        }
+        tips.href = 'javascript:void(0)'
+        tips.style = `
+          color: #fff;
+          text-decoration-line: none;
+        `
+        tips.innerHTML = '图片较小已隐藏，点此显示'
+        tips.addEventListener('click', showImage)
+        img.appendChild(tips)
+      }
+    })
   }
   const prevImage = () => {
     currentImage = currentImage === 0 ? imageSources.length - 1 : currentImage - 1
@@ -115,8 +180,7 @@
     }
   }
 
-  const ajaxDownload = (url, callback, args, tryTimes) => {
-    tryTimes = tryTimes || 0
+  const ajaxDownload = (url, callback, args, tryTimes = 0) => {
     const GM_download = GM.xmlHttpRequest || GM_xmlHttpRequest
     const clearUrl = url.replace(/[&\?]?download_timestamp=\d+/, '')
     const retryUrl = clearUrl + (clearUrl.indexOf('?') === -1 ? '?' : '&') + 'download_timestamp=' + new Date().getTime()
@@ -127,16 +191,17 @@
       onreadystatechange: (responseDetails) => {
         if (responseDetails.readyState === 4) {
           if (responseDetails.status === 200 || responseDetails.status === 304 || responseDetails.status === 0) {
-            const blob = responseDetails.response, size = blob && blob.size
+            const blob = responseDetails.response
+            const size = blob && blob.size
             if (size && (size / 1024 >= 5)) {
               callback(blob, args)
-            } else if (tryTimes++ == 3) {
+            } else if (tryTimes++ === 3) {
               callback(blob, args)
             } else {
               ajaxDownload(retryUrl, callback, args, tryTimes)
             }
           } else {
-            if (tryTimes++ == 3) {
+            if (tryTimes++ === 3) {
               callback(null, args)
             } else {
               ajaxDownload(retryUrl, callback, args, tryTimes)
@@ -145,7 +210,7 @@
         }
       },
       onerror: (responseDetails) => {
-        if (tryTimes++ == 3) {
+        if (tryTimes++ === 3) {
           callback(null, args)
         } else {
           ajaxDownload(retryUrl, callback, args, tryTimes)
@@ -208,8 +273,7 @@
 
   const downloadImage = () => {
     const url = imageSources[currentImage]
-    const tmp = url.split('/')
-    const filename = tmp[tmp.length - 1]
+    const filename = url.split('/').pop()
     ajaxDownload(url, downloadBlobFile, filename)
   }
 
@@ -217,8 +281,7 @@
     if (blob && filename) downloadBlobFile(blob, filename)
     const [first, ...newList] = list || imageSources
     if (!first) return
-    const tmp = first.split('/')
-    const f = tmp[tmp.length - 1]
+    const f = first.split('/').pop()
     ajaxDownload(first, downloadAllImage, { list: newList, filename: f })
   }
 
@@ -231,7 +294,7 @@
     const img = document.createElement('div')
     img.className = imgClass
     img.style = galleryImgStyle
-    img.style.backgroundImage = `url(${imageSources[0]})`
+    setImageSrc(imageSources[0], img)
     return img
   }
   const createLeftArrow = () => {
@@ -331,7 +394,16 @@
         return
       }
       if (src.includes('/attachments/')) {
-        const arr = img.src.replace(/https:/g, 'http:').split('http:')
+        const filename = url.split('/').pop()
+        const extname = filename.split('.').pop()
+        const arr = img.src
+          .replace(/https:/g, 'http:')
+          .replace(/\.medium\./, '.')
+          .replace(/\.thumb\./, '.')
+          .replace(/\.thumb_s\./, '.')
+          .replace(/\.thumb_ss\./, '.')
+          .replace(`${extname}.${extname}`, extname)
+          .split('http:')
         const src = arr.filter(s => !!s)
         imageSources.push(src[0])
       }
