@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         NGA 图片浏览器
 // @namespace    https://greasyfork.org/zh-CN/users/164691-shy07
-// @version      1.70
+// @version      1.81
 // @description  收集指定楼层的图片，改善图片浏览体验，并支持批量下载
 // @author       Shy07
 // @match        *://nga.178.com/*
@@ -20,13 +20,21 @@
 
   let imageSources = []
   let currentImage = 0
+  let napTimer = null
+  let zoomRate = 1
+  let rotateDeg = 0
 
   const callerId = '_shy07_gallery_caller'
   const containerClass = '_shy07_gallery_container'
   const imgClass = '_shy07_gallery_img'
   const progressID = '_shy07_progress_id'
+  const topLeftMenuID = '_shy07_top_left_menu'
+  const leftArrowID = '_shy07_left_arrow'
+  const rightArrowID = '_shy07_right_arrow'
+  const closeBtnID = '_shy07_close_btn'
   const galleryContainerStyle = `
-    display: block;
+    display: flex;
+    justify-content: center;
     top: 0;
     left: 0;
     width: 100vw;
@@ -35,27 +43,20 @@
     background: rgba(0, 0, 0, 0.9);
   `
   const galleryImgStyle = `
-    display: block;
     top: 0;
     left: 0;
-    width: 100vw;
+    width: auto;
     height: 100vh;
-    text-align: center;
-    line-height: 100vh;
-    color: #fff;
-    background-repeat: no-repeat;
-    background-size: contain;
-    background-position: center;
+    transition: all .4s linear;
   `
   const arrowStyle = `
     display: block;
     position: fixed;
     top: 0;
     line-height: 100vh;
-    color: #fff;
+    color: rgba(255, 255, 255, 0.6);
     font-size: 5rem;
     text-decoration-line: none;
-    opacity: 0.6;
   `
   const leftArrowStyle = `
     left: 0;
@@ -75,10 +76,15 @@
     text-decoration-line: none;
   `
   const topLeftMenuStyle = `
+    display: flex;
+    justify-content: center;
     position: fixed;
     top: 0;
     left: 0;
+    width: 100vw;
     padding: .5rem 1rem;
+    background: rgba(0, 0, 0, 0.3);
+    transition: all .4s linear;
   `
   const topLeftMenuItemStyle = `
     display: text-block;
@@ -97,63 +103,28 @@
     }
   }
 
-  const checkFileSize = (url, callback, tryTimes = 0) => {
-    const GM_download = GM.xmlHttpRequest || GM_xmlHttpRequest
-    const clearUrl = url.replace(/[&\?]?download_timestamp=\d+/, '')
-    const retryUrl = clearUrl + (clearUrl.indexOf('?') === -1 ? '?' : '&') + 'download_timestamp=' + new Date().getTime()
-    GM_download({
-      method: 'HEAD',
-      responseType: 'blob',
-      url,
-      onreadystatechange: (responseDetails) => {
-        if (responseDetails.readyState === 4) {
-          if (responseDetails.status === 200 || responseDetails.status === 304 || responseDetails.status === 0) {
-            const match = responseDetails.responseHeaders
-              .replace(/ /g, '')
-              .match(/content-length:\d+/)
-            const tmp = match && match[0] && match[0].split(':')
-            const len = parseInt(tmp[1], 10)
-            if (len && (len / 1024 >= 5)) {
-              callback(len)
-            } else if (tryTimes++ === 3) {
-              callback(len)
-            } else {
-              checkFileSize(retryUrl, callback, tryTimes)
-            }
-          } else {
-            if (tryTimes++ === 3) {
-              callback(null)
-            } else {
-              checkFileSize(retryUrl, callback, tryTimes)
-            }
-          }
-        }
-      },
-      onerror: (responseDetails) => {
-        if (tryTimes++ === 3) {
-          callback(null)
-        } else {
-          checkFileSize(retryUrl, callback, tryTimes)
-        }
-        console.log(responseDetails.status)
-      }
-    })
-  }
-
   const setImageSrc = (index, ele = null) => {
     const progress = document.querySelector('#' + progressID)
     if (progress) progress.innerHTML = `${index + 1}/${imageSources.length}`
     const src = imageSources[index]
     const img = ele || document.querySelector('.' + imgClass)
-    if (img) img.style.backgroundImage = `url(${src})`
+    if (img) {
+      img.src = src
+      img.style.transform = 'scale(1)'
+    }
+    wakeAll()
+    if (napTimer) clearTimeout(napTimer)
+    napTimer = setTimeout(napAll, 1000 * 5)
   }
-  const prevImage = () => {
+  const prevImage = ev => {
     currentImage = currentImage === 0 ? imageSources.length - 1 : currentImage - 1
     setImageSrc(currentImage)
+    ev.stopPropagation()
   }
-  const nextImage = () => {
+  const nextImage = ev => {
     currentImage = currentImage === imageSources.length - 1 ? 0 : currentImage + 1
     setImageSrc(currentImage)
+    ev.stopPropagation()
   }
   const handleKeydown = ev => {
     const code = ev.keyCode
@@ -168,6 +139,68 @@
       ev.preventDefault()
     }
   }
+
+  function throttle (final, delay, time) {
+    let timeout = null
+    let startTime = new Date()
+    let skip = false
+    return e => {
+      e.preventDefault()
+      e.stopPropagation()
+      let curTime = new Date()
+      clearTimeout(timeout)
+      if (curTime - startTime >= time) {
+        if (!skip) {
+          final(e)
+          setTimeout(() => (skip = false), delay)
+        }
+        skip = true
+        startTime = curTime
+      } else {
+        !skip && (timeout = setTimeout(() => final(e), time))
+      }
+    }
+  }
+
+  const rotateImage = ev => {
+    ev.stopPropagation()
+    const img = document.querySelector('.' + imgClass)
+    if (img) {
+      rotateDeg += 90
+      img.style.transform = `scale(${zoomRate}) rotate(${rotateDeg}deg)`
+    }
+  }
+  const zoomIn = () => {
+    const img = document.querySelector('.' + imgClass)
+    if (img) {
+      zoomRate = zoomRate === 5 ? zoomRate : zoomRate + .25
+      img.style.transform = `scale(${zoomRate}) rotate(${rotateDeg}deg)`
+    }
+  }
+  const zoomOut = () => {
+    const img = document.querySelector('.' + imgClass)
+    if (img) {
+      zoomRate = zoomRate === .25 ? zoomRate : zoomRate - .25
+      img.style.transform = `scale(${zoomRate}) rotate(${rotateDeg}deg)`
+    }
+  }
+  const handleMousewheel = throttle(e => {
+    if (e.wheelDelta) { // IE/Opera/Chrome
+      if (e.wheelDelta > 0) {
+        zoomIn()
+      }
+      if (e.wheelDelta < 0) {
+        zoomOut()
+      }
+    } else if (e.detail) { // Firefox
+      if (e.detail > 0) {
+        zoomIn()
+      }
+      if (e.detail < 0) {
+        zoomOut()
+      }
+    }
+  }, 400, 400)
 
   const ajaxDownload = (url, callback, args, tryTimes = 0) => {
     const GM_download = GM.xmlHttpRequest || GM_xmlHttpRequest
@@ -209,14 +242,6 @@
     })
   }
 
-  const fileNameFromHeader = (disposition, url) => {
-    if (disposition && /filename=.*/ig.test(disposition)) {
-      const result = disposition.match(/filename=.*/ig)
-      return decodeURI(result[0].split("=")[1])
-    }
-    return url.substring(url.lastIndexOf('/') + 1)
-  }
-
   const downloadBlobFile = (content, fileName) => {
     if ('msSaveOrOpenBlob' in navigator) {
       navigator.msSaveOrOpenBlob(content, fileName)
@@ -239,31 +264,11 @@
     }
   }
 
-  const downloadUrlFile = (url, fileName) => {
-    const aLink = document.createElement('a')
-    if (fileName) {
-      aLink.download = fileName
-    } else {
-      aLink.download = url.substring(url.lastIndexOf('/') + 1)
-    }
-    aLink.target = '_blank'
-    aLink.style = 'display:none;'
-    aLink.href = url
-    document.body.appendChild(aLink)
-    if (document.all) {
-      aLink.click() //IE
-    } else {
-      const evt = document.createEvent('MouseEvents')
-      evt.initEvent('click', true, true)
-      aLink.dispatchEvent(evt) // 其它浏览器
-    }
-    document.body.removeChild(aLink)
-  }
-
-  const downloadImage = () => {
+  const downloadImage = ev => {
     const url = imageSources[currentImage]
     const filename = url.split('/').pop()
     ajaxDownload(url, downloadBlobFile, filename)
+    ev.stopPropagation()
   }
 
   const downloadAllImage = (blob = null, { list, filename } = {}) => {
@@ -273,45 +278,56 @@
     const f = first.split('/').pop()
     ajaxDownload(first, downloadAllImage, { list: newList, filename: f })
   }
-
-  const openInNewTab = () => {
-    window.open(imageSources[currentImage], '_blank')
+  const handleDownloadAll = ev => {
+    downloadAllImage()
+    ev.stopPropagation()
   }
 
   const createGalleryImage = () => {
     currentImage = 0
-    const img = document.createElement('div')
+    const img = document.createElement('img')
     img.className = imgClass
     img.style = galleryImgStyle
+    img.addEventListener('wheel', handleMousewheel)
     setImageSrc(0, img)
     return img
   }
   const createLeftArrow = () => {
     const ele = document.createElement('a')
+    ele.id = leftArrowID
     ele.style = arrowStyle + leftArrowStyle
     ele.innerHTML = '<'
-    ele.href = 'javascript:void(0)'
+    ele.href = 'javascript:;'
     ele.addEventListener('click', prevImage)
+    ele.addEventListener('mouseover', wakeAll)
+    ele.addEventListener('mouseleave', napAll)
     return ele
   }
   const createRightArrow = () => {
     const ele = document.createElement('a')
+    ele.id = rightArrowID
     ele.style = arrowStyle + rightArrowStyle
     ele.innerHTML = '>'
-    ele.href = 'javascript:void(0)'
+    ele.href = 'javascript:;'
     ele.addEventListener('click', nextImage)
+    ele.addEventListener('mouseover', wakeAll)
+    ele.addEventListener('mouseleave', napAll)
     return ele
   }
   const createCloseBtn = () => {
     const ele = document.createElement('a')
+    ele.id = closeBtnID
     ele.style = closeBtnStyle
     ele.innerHTML = '关闭'
-    ele.href = 'javascript:void(0)'
+    ele.href = 'javascript:;'
     ele.addEventListener('click', hideGallery)
+    ele.addEventListener('mouseover', wakeAll)
+    ele.addEventListener('mouseleave', napAll)
     return ele
   }
   const createTopLeftMenu = () => {
     const ele = document.createElement('div')
+    ele.id = topLeftMenuID
     ele.style = topLeftMenuStyle
     const progress = document.createElement('span')
     progress.id = progressID
@@ -320,23 +336,47 @@
     const downloadBtn = document.createElement('a')
     downloadBtn.style= topLeftMenuItemStyle
     downloadBtn.innerHTML = '下载'
-    downloadBtn.href = 'javascript:void(0)'
+    downloadBtn.href = 'javascript:;'
     downloadBtn.addEventListener('click', downloadImage)
     const downloadAllBtn = document.createElement('a')
     downloadAllBtn.style= topLeftMenuItemStyle
     downloadAllBtn.innerHTML = '全部下载'
-    downloadAllBtn.href = 'javascript:void(0)'
-    downloadAllBtn.addEventListener('click', downloadAllImage)
-    const newTabBtn = document.createElement('a')
-    newTabBtn.style= topLeftMenuItemStyle
-    newTabBtn.innerHTML = '新页面打开'
-    newTabBtn.href = 'javascript:void(0)'
-    newTabBtn.addEventListener('click', openInNewTab)
+    downloadAllBtn.href = 'javascript:;'
+    downloadAllBtn.addEventListener('click', handleDownloadAll)
+    const clockwiseBtn = document.createElement('a')
+    clockwiseBtn.style= topLeftMenuItemStyle
+    clockwiseBtn.innerHTML = '旋转'
+    clockwiseBtn.href = 'javascript:;'
+    clockwiseBtn.addEventListener('click', rotateImage)
     ele.appendChild(progress)
     ele.appendChild(downloadBtn)
     ele.appendChild(downloadAllBtn)
-    ele.appendChild(newTabBtn)
+    ele.appendChild(clockwiseBtn)
+    ele.addEventListener('mouseover', wakeAll)
+    ele.addEventListener('mouseleave', napAll)
     return ele
+  }
+
+  const napElement = id => () => {
+    const ele = document.querySelector('#' + id)
+    if (ele) ele.style.opacity = 0
+  }
+  const wakeElement = id => () => {
+    const ele = document.querySelector('#' + id)
+    if (ele) ele.style.opacity = 1
+  }
+
+  const napAll = () => {
+    napElement(topLeftMenuID)()
+    napElement(leftArrowID)()
+    napElement(rightArrowID)()
+    napElement(closeBtnID)()
+  }
+  const wakeAll = () => {
+    wakeElement(topLeftMenuID)()
+    wakeElement(leftArrowID)()
+    wakeElement(rightArrowID)()
+    wakeElement(closeBtnID)()
   }
 
   const showGallery = () => {
@@ -354,6 +394,7 @@
       const ele = document.createElement('div')
       ele.className = containerClass
       ele.style = galleryContainerStyle
+      ele.addEventListener('click', hideGallery)
       const img = createGalleryImage()
       const leftArrow = createLeftArrow()
       const rightArrow = createRightArrow()
@@ -362,8 +403,8 @@
       ele.appendChild(img)
       ele.appendChild(leftArrow)
       ele.appendChild(rightArrow)
-      ele.appendChild(closeBtn)
       ele.appendChild(topLeftMenu)
+      ele.appendChild(closeBtn)
       document.body.appendChild(ele)
     }
   }
@@ -399,14 +440,14 @@
       const lazySrc = img.dataset ? img.dataset.srclazy : ''
       if (lazySrc) {
         const url = getOriginFile(lazySrc)
-        imageSources.push(url)
+        if (!imageSources.includes(url)) imageSources.push(url)
         return
       }
       if (src.includes('/attachments/')) {
         const arr = img.src.replace(/https:/g, 'http:').split('http:')
         const tmp = arr.filter(s => !!s)[0]
         const url = getOriginFile(tmp)
-        imageSources.push(getOriginFile(url))
+        if (!imageSources.includes(url)) imageSources.push(url)
       }
     })
   }
@@ -420,7 +461,7 @@
     a.addEventListener('click', handleClick)
     a.id = callerId + container.id
     a.className = 'small_colored_text_btn block_txt_c0 stxt'
-    a.href = 'javascript:void(0)'
+    a.href = 'javascript:;'
     a.title = '图片浏览'
     a.innerHTML = `
       <span>&nbsp;
