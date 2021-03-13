@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         NGA 图片浏览器
 // @namespace    https://greasyfork.org/zh-CN/users/164691-shy07
-// @version      1.81
+// @version      1.83
 // @description  收集指定楼层的图片，改善图片浏览体验，并支持批量下载
 // @author       Shy07
 // @match        *://nga.178.com/*
@@ -35,12 +35,20 @@
   const galleryContainerStyle = `
     display: flex;
     justify-content: center;
+    position: fixed;
     top: 0;
     left: 0;
     width: 100vw;
     height: 100vh;
+  `
+  const galleryMaskStyle = `
     position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
     background: rgba(0, 0, 0, 0.9);
+    z-index: -1;
   `
   const galleryImgStyle = `
     top: 0;
@@ -110,8 +118,10 @@
     const img = ele || document.querySelector('.' + imgClass)
     if (img) {
       img.src = src
-      img.style.transform = 'scale(1)'
+      img.style.transform = ''
     }
+    zoomRate = 1
+    rotateDeg = 0
     wakeAll()
     if (napTimer) clearTimeout(napTimer)
     napTimer = setTimeout(napAll, 1000 * 5)
@@ -394,12 +404,15 @@
       const ele = document.createElement('div')
       ele.className = containerClass
       ele.style = galleryContainerStyle
-      ele.addEventListener('click', hideGallery)
+      const mask = document.createElement('div')
+      mask.style = galleryMaskStyle
+      mask.addEventListener('click', hideGallery)
       const img = createGalleryImage()
       const leftArrow = createLeftArrow()
       const rightArrow = createRightArrow()
       const closeBtn = createCloseBtn()
       const topLeftMenu = createTopLeftMenu()
+      ele.appendChild(mask)
       ele.appendChild(img)
       ele.appendChild(leftArrow)
       ele.appendChild(rightArrow)
