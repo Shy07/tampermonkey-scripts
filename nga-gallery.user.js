@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         NGA 图片浏览器
 // @namespace    https://greasyfork.org/zh-CN/users/164691-shy07
-// @version      1.83
+// @version      1.90
 // @description  收集指定楼层的图片，改善图片浏览体验，并支持批量下载
 // @author       Shy07
 // @match        *://nga.178.com/*
@@ -55,7 +55,6 @@
     left: 0;
     width: auto;
     height: 100vh;
-    transition: all .4s linear;
   `
   const arrowStyle = `
     display: block;
@@ -118,9 +117,9 @@
     const img = ele || document.querySelector('.' + imgClass)
     if (img) {
       img.src = src
-      img.style.transform = ''
+      img.style.transform = `scale(.75) rotate(0deg)`
     }
-    zoomRate = 1
+    zoomRate = .75
     rotateDeg = 0
     wakeAll()
     if (napTimer) clearTimeout(napTimer)
@@ -138,14 +137,20 @@
   }
   const handleKeydown = ev => {
     const code = ev.keyCode
-    if (code === 27) {
+    if (code === 27 || code === 32) {
       hideGallery()
       ev.preventDefault()
     } else if (code === 37) {
       prevImage()
       ev.preventDefault()
+    } else if (code === 38) {
+      zoomIn()
+      ev.preventDefault()
     } else if (code === 39) {
       nextImage()
+      ev.preventDefault()
+    } else if (code === 40) {
+      zoomOut()
       ev.preventDefault()
     }
   }
@@ -180,10 +185,11 @@
       img.style.transform = `scale(${zoomRate}) rotate(${rotateDeg}deg)`
     }
   }
-  const zoomIn = () => {
+  const zoomIn = (rate = null) => {
     const img = document.querySelector('.' + imgClass)
     if (img) {
       zoomRate = zoomRate === 5 ? zoomRate : zoomRate + .25
+      if (rate) zoomRate = rate
       img.style.transform = `scale(${zoomRate}) rotate(${rotateDeg}deg)`
     }
   }
@@ -381,6 +387,7 @@
     napElement(leftArrowID)()
     napElement(rightArrowID)()
     napElement(closeBtnID)()
+    zoomIn(1)
   }
   const wakeAll = () => {
     wakeElement(topLeftMenuID)()
