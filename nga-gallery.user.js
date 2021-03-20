@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         NGA 图片浏览器
 // @namespace    https://greasyfork.org/zh-CN/users/164691-shy07
-// @version      1.90
+// @version      1.91
 // @description  收集指定楼层的图片，改善图片浏览体验，并支持批量下载
 // @author       Shy07
 // @match        *://nga.178.com/*
@@ -123,7 +123,10 @@
     rotateDeg = 0
     wakeAll()
     if (napTimer) clearTimeout(napTimer)
-    napTimer = setTimeout(napAll, 1000 * 5)
+    napTimer = setTimeout(() => {
+      napAll()
+      zoomIn(1)
+    }, 1000 * 5)
   }
   const prevImage = ev => {
     currentImage = currentImage === 0 ? imageSources.length - 1 : currentImage - 1
@@ -387,7 +390,6 @@
     napElement(leftArrowID)()
     napElement(rightArrowID)()
     napElement(closeBtnID)()
-    zoomIn(1)
   }
   const wakeAll = () => {
     wakeElement(topLeftMenuID)()
